@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+python-multipart
+openpyxl
+selenium
+selenium-stealth
+undetected-chromedriver
+# undetected-chromedriver imports distutils, removed from the standard library in Python 3.12+
+setuptools
+pytest
+httpx

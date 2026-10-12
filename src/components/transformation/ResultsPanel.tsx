@@ -16,7 +16,7 @@ const KIND_LABEL: Record<FlagKind, string> = {
 };
 
 /** Rows shown before "Show more"; after it the table is paginated. */
-const PREVIEW_ROWS = 10;
+const PREVIEW_ROWS = 5;
 const PAGE_SIZE = 25;
 
 function bytesOf(file: OutputFile): Uint8Array<ArrayBuffer> {

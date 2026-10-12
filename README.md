@@ -1,29 +1,52 @@
-# Welcome to your Lovable project
+# Auto-Migrate
 
-This project was built with [Lovable](https://lovable.dev).
+Document migration workspace: a React frontend (TanStack Start) with a Python backend (FastAPI).
 
-## Build with Lovable
+| Page | Runs on |
+|---|---|
+| Transformation | TypeScript server functions (`src/server/transform`) |
+| Populate Request ID | Python backend (`backend/`), which drives Chrome to read the CLM Bulk Import Report |
 
-Open your project in the [Lovable editor](https://lovable.dev) and keep building.
+## Requirements
 
-- **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: connect the project to GitHub and every change made in Lovable is committed straight to your repository.
-- **Full ownership**: this code is yours. Push to your repository and your changes sync back into Lovable, ready for your next prompt.
+- Node.js and npm
+- Python 3.9+ and Google Chrome (for Populate Request ID)
 
-## Development
-
-Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
+## Setup
 
 ```sh
-git clone <this-repository-url>
-cd <repository-name>
 npm i
-npm run dev
+python -m pip install -r backend/requirements.txt
 ```
 
-## Built with
+## Run
 
-- TanStack Start
-- TypeScript
-- React
-- Tailwind CSS
+Use two terminals:
+
+```sh
+npm run dev       # web app
+npm run dev:api   # Python backend on port 8000; the web app proxies /api to it
+```
+
+If the backend isn't running, the Populate Request ID page says so and offers a "Check again" button.
+
+## Test
+
+```sh
+npm test          # frontend and transformation tests
+npm run test:api  # backend tests (no browser or CLM access needed)
+```
+
+## Populate Request ID
+
+1. Upload the filled bulk import template, already imported to the CLM.
+2. Enter the CLM site URL, username and password, plus the batch's **Uploaded On** time (exactly as the Bulk Import Upload list shows it) and its **Total count**.
+3. Run. Chrome logs in, reads the batch report and fills **Record ID, Request ID, File Names and File Path** after Record Reference Id. If enabled, it also fills the Supporting Document sheet.
+4. Download the updated workbook. Records still processing on the CLM are left empty; run the downloaded workbook again later to fill them.
+
+Notes:
+- Only one run at a time: two logins on the same CLM account break each other's session.
+- The password is passed to the run over a pipe. It is never saved, logged or written to disk.
+- Each run works in its own temporary folder. The backend keeps the last five runs and deletes older ones.
+
+The populator code in `backend/request_id/` is copied from [Bulk-design_process](https://github.com/markcastorm/Bulk-design_process). See `backend/request_id/SOURCE.md` before copying in a newer version.

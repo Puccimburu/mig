@@ -1,9 +1,7 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ChevronDown,
   ChevronUp,
-  FileSpreadsheet,
-  Files,
   LoaderCircle,
   Play,
   RotateCcw,
@@ -29,7 +27,7 @@ import type {
 } from "@/lib/transform/types";
 import { ALL_ROWS_APP_TYPE, DEFAULT_PREFIX } from "@/lib/transform/types";
 import { MappingTable } from "./MappingTable";
-import { Metric } from "./parts";
+import { FileSlot, Metric, Step } from "./parts";
 import { ResultsPanel } from "./ResultsPanel";
 
 function errorMessage(e: unknown): string {
@@ -681,93 +679,5 @@ function AppTypePicker({
       )}
       {note && <span className="transform-note">{note}</span>}
     </div>
-  );
-}
-
-function FileSlot({
-  title,
-  hint,
-  accept,
-  multiple = false,
-  files,
-  onAdd,
-  onRemove,
-}: {
-  title: string;
-  hint: string;
-  accept: string;
-  multiple?: boolean;
-  files: File[];
-  onAdd: (files: File[]) => void;
-  onRemove: (index: number) => void;
-}) {
-  const input = useRef<HTMLInputElement>(null);
-  return (
-    <div className={`upload-zone transform-slot ${files.length ? "filled" : ""}`}>
-      <input
-        ref={input}
-        type="file"
-        accept={accept}
-        multiple={multiple}
-        hidden
-        aria-label={title}
-        onChange={(e) => {
-          onAdd(Array.from(e.target.files ?? []));
-          e.target.value = "";
-        }}
-      />
-      <div className="upload-icon">{multiple ? <Files /> : <FileSpreadsheet />}</div>
-      <h3>
-        {title}
-        {multiple && files.length > 0 && <span className="count-pill">{files.length}</span>}
-      </h3>
-      {files.map((f, i) => (
-        <p key={`${f.name}-${i}`} className="transform-file">
-          <span>{f.name}</span>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-5 w-5"
-            aria-label={`Remove ${f.name}`}
-            onClick={() => onRemove(i)}
-          >
-            <X />
-          </Button>
-        </p>
-      ))}
-      {(multiple || !files.length) && (
-        <p>
-          <Button variant="link" className="browse" onClick={() => input.current?.click()}>
-            {files.length ? "Add more" : multiple ? "Choose files" : "Choose file"}
-          </Button>
-        </p>
-      )}
-      <small>{hint}</small>
-    </div>
-  );
-}
-
-function Step({
-  number,
-  title,
-  aside,
-  children,
-}: {
-  number: number;
-  title: string;
-  aside?: string | undefined;
-  children: ReactNode;
-}) {
-  return (
-    <section className="transform-step">
-      <div className="section-heading">
-        <h2>
-          <span className="transform-step-number">{number}</span>
-          {title}
-        </h2>
-        {aside && <span>{aside}</span>}
-      </div>
-      {children}
-    </section>
   );
 }
