@@ -62,10 +62,6 @@ a { text-decoration: none; color: inherit; }
 .sidebar > * { flex-shrink: 0; }
 .brand { height: 83px; display: flex; align-items: center; gap: 10px; padding: 8px 24px 0; font-weight: 700; font-size: 19px; }
 .brand-mark { width: 33px; height: 33px; flex-shrink: 0; object-fit: contain; }
-.workspace-select { margin: 3px 17px 29px; padding: 11px; display: flex; align-items: center; gap: 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--background); }
-.workspace-select > svg:first-child { color: var(--muted-foreground); width: 19px; }
-.workspace-select strong { font-size: 14px; font-weight: 600; }
-.workspace-select small { font-size: 13px; color: var(--muted-foreground); display: block; margin-top: 3px; }
 .nav-label { font-size: 12px; font-weight: 600; letter-spacing: 1.4px; color: var(--muted-foreground); padding: 0 26px; margin-bottom: 10px; }
 .navigation { padding: 0 13px; display: flex; flex-direction: column; gap: 5px; }
 .navigation .nav-item { width: 100%; height: auto; min-height: 43px; padding: 11px 13px; gap: 12px; font-size: 14px; font-weight: 500; white-space: normal; text-align: left; }

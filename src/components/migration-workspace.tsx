@@ -1,6 +1,6 @@
 import { createContext, useContext, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
 import { Link } from '@tanstack/react-router';
-import { ArrowDownToLine, ArrowLeftRight, ArrowRight, Bell, Check, CheckCheck, ChevronDown, ChevronLeft, ChevronRight, CircleCheck, CircleHelp, Clock3, FileCheck2, FileClock, FilePlus2, FileText, FolderOpen, History, ListFilter, LoaderCircle, Menu, MoreHorizontal, Plus, RefreshCw, Search, Settings2, ShieldCheck, Sparkles, Ticket, Trash2, TriangleAlert, Upload, X, type LucideIcon } from 'lucide-react';
+import { ArrowDownToLine, ArrowLeftRight, ArrowRight, Bell, Check, CheckCheck, ChevronLeft, ChevronRight, CircleCheck, CircleHelp, Clock3, FileCheck2, FileClock, FilePlus2, FileText, History, ListFilter, LoaderCircle, Menu, MoreHorizontal, Plus, RefreshCw, Search, Settings2, ShieldCheck, Sparkles, Ticket, Trash2, TriangleAlert, Upload, X, type LucideIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { TransformationWizard } from '@/components/transformation/TransformationWizard';
@@ -102,7 +102,7 @@ function WorkspaceView({ section, shared }: { section: string; shared: ReturnTyp
   return <div className="workspace">
     <aside className={`sidebar ${mobileOpen ? 'open' : ''}`}>
       <Link to="/" className="brand"><img src="/favicon.png" alt="" className="brand-mark" width={33} height={33}/>Auto-Migrate</Link>
-      <div className="workspace-select"><FolderOpen/><div><strong>Migration workspace</strong><small>Document operations</small></div><ChevronDown size={13} className="ml-auto text-muted-foreground"/></div>
+      
       <div className="nav-label">MIGRATION WORKFLOW</div>
       <nav className="navigation" aria-label="Migration workflow">{sections.slice(0,6).map(s=><Button key={s.id} asChild variant={s.id===section?'activeNavigation':'navigation'} className="nav-item"><Link to={s.id==='uploads'?'/':'/workflow/$section'} params={s.id==='uploads'?{}:{section:s.id}} onClick={()=>setMobileOpen(false)}><s.icon/><span>{s.title}{s.subtitle&&<small>{s.subtitle}</small>}</span>{s.label&&<span className="nav-count">{documents.filter(d=>['Failed','Partially completed'].includes(d.status)).length}</span>}</Link></Button>)}</nav>
       <div className="nav-divider"/><div className="nav-label">MONITOR & MANAGE</div>
