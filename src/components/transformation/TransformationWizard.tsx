@@ -23,6 +23,7 @@ import type {
   ClientSheets,
   MappingEntry,
   RunResult,
+  SupportingSummary,
   TemplateColumns,
 } from "@/lib/transform/types";
 import { ALL_ROWS_APP_TYPE, DEFAULT_PREFIX } from "@/lib/transform/types";
@@ -75,6 +76,15 @@ export function TransformationWizard() {
   const [clientSheets, setClientSheets] = useState<ClientSheets | null>(null);
   const [metadataSheet, setMetadataSheet] = useState("");
   const [fileNameColumn, setFileNameColumn] = useState("");
+  // Sheet listing the SharePoint files: file name + folder path build each File Path.
+  const [filesSheet, setFilesSheet] = useState("");
+  const [filesNameColumn, setFilesNameColumn] = useState("");
+  const [filesFolderColumn, setFilesFolderColumn] = useState("");
+  // Parent-child linkage of supporting documents.
+  const [linkSupporting, setLinkSupporting] = useState(false);
+  const [docTypeColumn, setDocTypeColumn] = useState("");
+  const [parentDocColumn, setParentDocColumn] = useState("");
+  const [supportingTypes, setSupportingTypes] = useState<string[]>([]);
   const [templateColumns, setTemplateColumns] = useState<TemplateColumns[] | null>(null);
   const [mappings, setMappings] = useState<Record<number, MappingEntry[]>>({});
   const [activeTemplate, setActiveTemplate] = useState(0);
@@ -88,6 +98,11 @@ export function TransformationWizard() {
   const { log, recordSnapshot } = useActivity();
 
   const sheet = clientSheets?.sheets.find((s) => s.name === metadataSheet);
+  const pathsSheet = clientSheets?.sheets.find((s) => s.name === filesSheet);
+  const pathsReady = Boolean(pathsSheet && filesNameColumn && filesFolderColumn);
+  const docTypeValues = (sheet && docTypeColumn && sheet.values[docTypeColumn]) || [];
+  const linkReady =
+    !linkSupporting || Boolean(docTypeColumn && parentDocColumn && supportingTypes.length);
 
   // Load the template headers and proposed mapping as soon as the working sheet is known.
   useEffect(() => {
@@ -122,6 +137,9 @@ export function TransformationWizard() {
     setClientSheets(null);
     setMetadataSheet("");
     setFileNameColumn("");
+    setFilesSheet("");
+    setFilesNameColumn("");
+    setFilesFolderColumn("");
     setError("");
     if (!file) return;
     setBusy("inspect");
@@ -131,6 +149,7 @@ export function TransformationWizard() {
       const sheets = await inspectClientWorkbook({ data: fd });
       setClientSheets(sheets);
       chooseSheet(sheets, sheets.metadataSheet ?? "");
+      chooseFilesSheet(sheets, sheets.filesSheet ?? "");
     } catch (e) {
       setError(errorMessage(e));
     } finally {
@@ -139,8 +158,28 @@ export function TransformationWizard() {
   }
 
   function chooseSheet(sheets: ClientSheets, name: string) {
+    const info = sheets.sheets.find((s) => s.name === name);
     setMetadataSheet(name);
-    setFileNameColumn(sheets.sheets.find((s) => s.name === name)?.guess.fileName ?? "");
+    setFileNameColumn(info?.guess.fileName ?? "");
+    setParentDocColumn(info?.guess.parentDoc ?? "");
+    chooseDocTypeColumn(info, info?.guess.docType ?? "");
+  }
+
+  /** Doc type column, with the values containing "support" ticked as supporting documents. */
+  function chooseDocTypeColumn(info: ClientSheets["sheets"][number] | undefined, column: string) {
+    setDocTypeColumn(column);
+    setSupportingTypes((info?.values[column] ?? []).filter((v) => /support/i.test(v)));
+    setAnalysis(null);
+    setResult(null);
+  }
+
+  function chooseFilesSheet(sheets: ClientSheets, name: string) {
+    const guess = sheets.sheets.find((s) => s.name === name)?.guess;
+    setFilesSheet(name);
+    setFilesNameColumn(guess?.filesName ?? "");
+    setFilesFolderColumn(guess?.filesFolder ?? "");
+    setAnalysis(null);
+    setResult(null);
   }
 
   function formData(withChoices: boolean) {
@@ -160,7 +199,16 @@ export function TransformationWizard() {
       JSON.stringify({
         prefix,
         metadataSheet,
-        columns: { fileName: fileNameColumn },
+        filesSheet: filesSheet || undefined,
+        columns: {
+          fileName: fileNameColumn,
+          filesName: filesNameColumn || undefined,
+          filesFolder: filesFolderColumn || undefined,
+          ...(linkSupporting
+            ? { docType: docTypeColumn || undefined, parentDoc: parentDocColumn || undefined }
+            : {}),
+        },
+        supportingDocs: linkSupporting ? { types: supportingTypes } : undefined,
         templates: choices,
       }),
     );
@@ -332,6 +380,162 @@ export function TransformationWizard() {
             )}
           </div>
         )}
+        {clientSheets && (
+          <div className="transform-picker transform-sheet-pickers transform-paths-picker">
+            <label className="transform-field">
+              <span>
+                <strong>File path sheet</strong> · SharePoint files with their folder
+              </span>
+              <select
+                value={filesSheet}
+                className={filesSheet ? "" : "transform-missing"}
+                onChange={(e) => chooseFilesSheet(clientSheets, e.target.value)}
+              >
+                <option value="">— Choose a sheet —</option>
+                {clientSheets.sheets.map((s) => (
+                  <option key={s.name} value={s.name}>
+                    {s.name} ({s.rows} rows)
+                  </option>
+                ))}
+              </select>
+            </label>
+            {pathsSheet && (
+              <>
+                <label className="transform-field">
+                  <span>File name column</span>
+                  <select
+                    value={filesNameColumn}
+                    className={filesNameColumn ? "" : "transform-missing"}
+                    onChange={(e) => {
+                      setFilesNameColumn(e.target.value);
+                      setAnalysis(null);
+                      setResult(null);
+                    }}
+                  >
+                    <option value="">— Choose a column —</option>
+                    {pathsSheet.headers.map((h) => (
+                      <option key={h} value={h}>
+                        {h}
+                        {pathsSheet.samples[h] ? ` · e.g. ${pathsSheet.samples[h]}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="transform-field">
+                  <span>Folder path column</span>
+                  <select
+                    value={filesFolderColumn}
+                    className={filesFolderColumn ? "" : "transform-missing"}
+                    onChange={(e) => {
+                      setFilesFolderColumn(e.target.value);
+                      setAnalysis(null);
+                      setResult(null);
+                    }}
+                  >
+                    <option value="">— Choose a column —</option>
+                    {pathsSheet.headers.map((h) => (
+                      <option key={h} value={h}>
+                        {h}
+                        {pathsSheet.samples[h] ? ` · e.g. ${pathsSheet.samples[h]}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </>
+            )}
+            {filesSheet && filesSheet === metadataSheet && (
+              <p className="transform-warning">
+                <TriangleAlert size={13} /> This is also the working sheet. Usually the file paths
+                are on a separate sheet such as “Files on SP”.
+              </p>
+            )}
+          </div>
+        )}
+        {sheet && (
+          <div className="transform-picker transform-linkage">
+            <label className="request-id-check">
+              <input
+                type="checkbox"
+                checked={linkSupporting}
+                onChange={(e) => {
+                  setLinkSupporting(e.target.checked);
+                  setAnalysis(null);
+                  setResult(null);
+                }}
+              />
+              <strong>Link supporting documents to their parents</strong>
+            </label>
+            <small className="transform-note">
+              Each supporting document goes into the Supporting Document sheet of its parent's
+              template, under the parent's Record Reference Id.
+            </small>
+            {linkSupporting && (
+              <div className="transform-sheet-pickers transform-paths-picker">
+                <label className="transform-field">
+                  <span>Doc type column</span>
+                  <select
+                    value={docTypeColumn}
+                    className={docTypeColumn ? "" : "transform-missing"}
+                    onChange={(e) => chooseDocTypeColumn(sheet, e.target.value)}
+                  >
+                    <option value="">— Choose a column —</option>
+                    {sheet.headers.map((h) => (
+                      <option key={h} value={h}>
+                        {h}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="transform-field">
+                  <span>Parent document column · the parent's file name</span>
+                  <select
+                    value={parentDocColumn}
+                    className={parentDocColumn ? "" : "transform-missing"}
+                    onChange={(e) => {
+                      setParentDocColumn(e.target.value);
+                      setAnalysis(null);
+                      setResult(null);
+                    }}
+                  >
+                    <option value="">— Choose a column —</option>
+                    {sheet.headers.map((h) => (
+                      <option key={h} value={h}>
+                        {h}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {docTypeColumn && (
+                  <fieldset className="name-check-columns transform-linkage-types">
+                    <legend>Doc types that are supporting documents</legend>
+                    {docTypeValues.map((v) => (
+                      <label key={v} className="request-id-check">
+                        <input
+                          type="checkbox"
+                          checked={supportingTypes.includes(v)}
+                          onChange={() => {
+                            setSupportingTypes((all) =>
+                              all.includes(v) ? all.filter((x) => x !== v) : [...all, v],
+                            );
+                            setAnalysis(null);
+                            setResult(null);
+                          }}
+                        />
+                        {v}
+                      </label>
+                    ))}
+                    {!docTypeValues.length && (
+                      <p className="transform-warning">
+                        <TriangleAlert size={13} /> “{docTypeColumn}” has too many different values
+                        to list. Choose the doc type column.
+                      </p>
+                    )}
+                  </fieldset>
+                )}
+              </div>
+            )}
+          </div>
+        )}
         <label className="transform-field">
           <span>Remove the folder path up to and including</span>
           <input
@@ -454,13 +658,28 @@ export function TransformationWizard() {
         >
           {!analysis && (
             <div className="transform-actions transform-actions-start">
-              <Button disabled={!fileNameColumn || busy !== null} onClick={analyze}>
+              <Button
+                disabled={!fileNameColumn || !pathsReady || !linkReady || busy !== null}
+                onClick={analyze}
+              >
                 {busy === "analyze" ? <LoaderCircle className="animate-spin" /> : <Search />}
                 Analyze files
               </Button>
               {!fileNameColumn && (
                 <span className="transform-warning">
                   <TriangleAlert size={13} /> Choose the file name column in step 1.
+                </span>
+              )}
+              {fileNameColumn && !pathsReady && (
+                <span className="transform-warning">
+                  <TriangleAlert size={13} /> Choose the file path sheet and its file name and
+                  folder path columns in step 1.
+                </span>
+              )}
+              {fileNameColumn && pathsReady && !linkReady && (
+                <span className="transform-warning">
+                  <TriangleAlert size={13} /> Choose the doc type column, the parent document column
+                  and at least one supporting doc type in step 1.
                 </span>
               )}
             </div>
@@ -536,6 +755,10 @@ export function TransformationWizard() {
                 {!analysis.client.appTypeColumn &&
                   ` The sheet has no application type column, so all rows go into one template (“${ALL_ROWS_APP_TYPE}”).`}
               </small>
+
+              {analysis.client.supporting && (
+                <SupportingPreview summary={analysis.client.supporting} />
+              )}
 
               <div className="transform-summary transform-summary-spaced">
                 <Metric
@@ -679,5 +902,49 @@ function AppTypePicker({
       )}
       {note && <span className="transform-note">{note}</span>}
     </div>
+  );
+}
+
+function SupportingPreview({ summary }: { summary: SupportingSummary }) {
+  const unlinked = summary.total - summary.linked;
+  return (
+    <>
+      <div className="transform-summary transform-summary-spaced">
+        <Metric
+          label="Supporting documents"
+          value={summary.total}
+          note="Rows with a supporting doc type"
+        />
+        <Metric
+          label="Linked to a parent"
+          value={summary.linked}
+          tone={summary.linked ? "success" : "neutral"}
+          note={
+            Object.entries(summary.byAppType)
+              .map(([type, n]) => `${type}: ${n}`)
+              .join(" · ") || "—"
+          }
+        />
+        <Metric
+          label="No parent name"
+          value={summary.noParentName}
+          tone={summary.noParentName ? "warning" : "success"}
+          note="Parent document cell is empty"
+        />
+        <Metric
+          label="Parent not found"
+          value={summary.parentNotFound}
+          tone={summary.parentNotFound ? "warning" : "success"}
+          note="No Parent-Main Agreement has that file name"
+        />
+      </div>
+      {(unlinked > 0 || summary.ambiguousParent > 0) && (
+        <small className="transform-note">
+          {unlinked > 0 && `${unlinked} supporting documents can't be linked and will be flagged. `}
+          {summary.ambiguousParent > 0 &&
+            `${summary.ambiguousParent} name a parent file that several agreements share; they go to the first and are flagged.`}
+        </small>
+      )}
+    </>
   );
 }

@@ -1,6 +1,10 @@
 import { createServerFn } from "@tanstack/react-start";
 
-import type { ClientColumns, TemplateSelection } from "@/lib/transform/types";
+import type {
+  ClientColumns,
+  SupportingDocsOptions,
+  TemplateSelection,
+} from "@/lib/transform/types";
 
 type FormOptions = {
   prefix?: string;
@@ -8,6 +12,7 @@ type FormOptions = {
   metadataSheet?: string;
   filesSheet?: string;
   columns?: ClientColumns;
+  supportingDocs?: SupportingDocsOptions;
 };
 
 function requireFormData(data: unknown): FormData {
@@ -42,6 +47,7 @@ async function readForm(form: FormData) {
       metadataSheet: options.metadataSheet,
       filesSheet: options.filesSheet,
       columns: options.columns,
+      supportingDocs: options.supportingDocs,
     },
   };
 }

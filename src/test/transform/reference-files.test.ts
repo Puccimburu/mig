@@ -57,6 +57,94 @@ describe.skipIf(!available)("reference workbooks", () => {
     expect(mapping.filter((m) => m.mandatory && !m.client)).toEqual([]);
   }, 60_000);
 
+  it("links supporting documents to their parents' Record Reference Ids", async () => {
+    const opts = { prefix: PREFIX, supportingDocs: { types: ["Supporting Documents"] } };
+    const sheets = await inspectClient(files.client);
+    const main = sheets.sheets.find((s) => s.name === "Metadata Extraction")!;
+    expect(main.guess).toMatchObject({ docType: "Doc Type", parentDoc: "Parent Doc Names" });
+    expect(main.values["Doc Type"]).toContain("Supporting Documents");
+
+    const a = await analyze(files, opts);
+    const s = a.client.supporting!;
+    expect(s.total).toBe(333);
+    expect(s.linked + s.noParentName + s.parentNotFound).toBe(s.total);
+    // Contract Request rows are unchanged by the linkage.
+    expect(a.templates[0]).toMatchObject({ appTypes: ["NDA Agreement"], templateRows: 67 });
+
+    // NDA agreements have no supporting documents here; Property Lease has the most. Turn
+    // the NDA template into a Property Lease one with that app type's number of records.
+    const leaseRows = a.client.appTypes.find((t) => t.name === "Property Lease")!.count;
+    const leaseTemplate = await Workbook.load(files.templates[0]!.data);
+    const cr = readTable(leaseTemplate.sheet("Contract Request"));
+    const refCol = cr.headers.find((h) => h.text === "Record Reference Id")!.col;
+    for (let i = 0; i < Math.max(leaseRows, cr.dataRows.length); i++)
+      cr.sheet.set(refCol, cr.headerRow + 1 + i, i < leaseRows ? String(i + 1) : null);
+    const leaseFiles = {
+      client: files.client,
+      templates: [{ name: "Property_Lease_Aug_20.xlsx", data: await leaseTemplate.save() }],
+    };
+
+    const result = await runRaw(leaseFiles, opts);
+    const filled = result.templates[0]!;
+    expect(filled).toMatchObject({
+      status: "filled",
+      appTypes: ["Property Lease"],
+      rowsWritten: leaseRows,
+    });
+    const leaseLinked = s.byAppType["Property Lease"]!;
+    expect(leaseLinked).toBeGreaterThan(100);
+    expect(filled.supportingWritten).toBe(leaseLinked);
+    expect(result.summary.supportingWritten).toBe(leaseLinked);
+
+    // Independent check: each written document's parent (via Contract Version's file for
+    // that Record Reference Id) is the file named in its "Parent Doc Names" cell.
+    const client = await Workbook.load(files.client.data);
+    const meta = readTable(client.sheet("Metadata Extraction"));
+    const col = (h: string) => meta.headers.find((x) => x.text === h)!.col;
+    // File name only, compared the way SharePoint stores it ("*" and similar become "_").
+    const base = (v: unknown) =>
+      String(v ?? "")
+        .split("/")
+        .pop()!
+        .trim()
+        .toLowerCase()
+        .replace(/[*:<>?"\\|]/g, "_");
+    const parentNameOf = new Map<string, string>();
+    for (const r of meta.dataRows)
+      if (String(meta.sheet.get(col("Doc Type"), r)).trim() === "Supporting Documents")
+        parentNameOf.set(
+          base(meta.sheet.get(col("File Name (with extension)"), r)),
+          base(meta.sheet.get(col("Parent Doc Names"), r)),
+        );
+
+    const tpl = await Workbook.load(result.templateBytes[0]!);
+    const cv = readTable(tpl.sheet("Contract Version"));
+    const fileOfRef = new Map(
+      cv.dataRows.map((r) => [String(cv.sheet.get(1, r)), base(cv.sheet.get(2, r))]),
+    );
+    const sd = readTable(tpl.sheet("Supporting Document"));
+    const rows = sd.dataRows.filter((r) => String(sd.sheet.get(1, r) ?? "") !== "");
+    expect(rows.length).toBe(leaseLinked);
+    const numbering = new Map<string, number>();
+    for (const r of rows) {
+      const ref = String(sd.sheet.get(1, r));
+      const n = (numbering.get(ref) ?? 0) + 1;
+      numbering.set(ref, n);
+      expect(sd.sheet.get(2, r)).toBe(n); // Document Reference Id restarts per parent
+      expect(sd.sheet.get(4, r)).toBe("Supporting Document");
+      const child = base(sd.sheet.get(3, r));
+      expect(child).not.toBe("");
+      expect(parentNameOf.get(child)).toBe(fileOfRef.get(ref));
+    }
+
+    // Every supporting document that wasn't written is flagged with a reason.
+    const notWritten = s.total - leaseLinked;
+    const clientFlags = result.flags.filter(
+      (f) => f.kind === "supporting" && f.workbook === "client",
+    );
+    expect(clientFlags.length).toBe(notWritten);
+  }, 120_000);
+
   it("fills the template in place and matches the hand-made file paths", async () => {
     const original = await Workbook.load(files.client.data);
     const result = await runRaw(files, { prefix: PREFIX });

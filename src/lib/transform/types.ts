@@ -17,7 +17,7 @@ export type MappingEntry = {
 };
 
 export type FlagKind =
-  "dropdown" | "fuzzy" | "mandatory" | "file-path" | "prefix" | "version-dropdown";
+  "dropdown" | "fuzzy" | "mandatory" | "file-path" | "prefix" | "version-dropdown" | "supporting";
 
 export type Flag = {
   kind: FlagKind;
@@ -53,6 +53,30 @@ export type ClientColumns = {
   filesName?: string | undefined;
   /** SharePoint files sheet: folder path. */
   filesFolder?: string | undefined;
+  /** Main data sheet: document type (Parent-Main Agreement, Supporting Documents, ...). */
+  docType?: string | undefined;
+  /** Main data sheet: file name of the parent document (supporting documents only). */
+  parentDoc?: string | undefined;
+};
+
+/** Parent-child linkage: supporting documents go to their parent's Supporting Document sheet. */
+export type SupportingDocsOptions = {
+  /** Doc Type values that mark a supporting document. */
+  types: string[];
+};
+
+/** How the supporting documents link to their parents (analysis preview). */
+export type SupportingSummary = {
+  total: number;
+  /** Parent found among the Contract Request (Parent-Main Agreement) rows. */
+  linked: number;
+  noParentName: number;
+  /** No Contract Request row has that file name. */
+  parentNotFound: number;
+  /** Several Contract Request rows have that file name; the first is used. */
+  ambiguousParent: number;
+  /** Linked supporting documents per parent app type. */
+  byAppType: Record<string, number>;
 };
 
 export type SheetInfo = {
@@ -61,6 +85,8 @@ export type SheetInfo = {
   headers: string[];
   /** First non-empty value per header, shown next to the mapping. */
   samples: Record<string, string>;
+  /** Distinct values of headers with only a few of them (e.g. Doc Type). */
+  values: Record<string, string[]>;
   /** Likely key columns on this sheet (header texts), or null when none looks right. */
   guess: { [K in keyof ClientColumns]-?: string | null };
 };
@@ -110,6 +136,8 @@ export type AnalysisResult = {
     requestRows: number;
     /** Counts are of Contract Request rows only. */
     appTypes: AppTypeCount[];
+    /** Present when supporting documents are linked to their parents. */
+    supporting?: SupportingSummary | undefined;
   };
   templates: TemplateAnalysis[];
   filePaths: {
@@ -137,6 +165,8 @@ export type TemplateRunResult = {
   /** Why the template was skipped. */
   error?: string;
   rowsWritten: number;
+  /** Supporting Document rows written (when linking supporting documents). */
+  supportingWritten: number;
   output?: OutputFile;
 };
 
@@ -150,6 +180,8 @@ export type RunResult = {
     filePathsWritten: number;
     columnInserted: boolean;
     duplicateNames: number;
+    /** Supporting Document rows written across the filled templates. */
+    supportingWritten: number;
     /** Per document (row of the working sheet) after this run. */
     documents: {
       total: number;

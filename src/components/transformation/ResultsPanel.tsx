@@ -13,6 +13,7 @@ const KIND_LABEL: Record<FlagKind, string> = {
   "file-path": "File path not found",
   prefix: "Prefix not found",
   "version-dropdown": "Contract Version dropdown",
+  supporting: "Supporting document",
 };
 
 /** Rows shown before "Show more"; after it the table is paginated. */
@@ -91,6 +92,18 @@ export function ResultsPanel({ result }: { result: RunResult }) {
           tone="success"
           note={`Across ${result.templates.filter((t) => t.status === "filled").length} templates`}
         />
+        {(result.summary.supportingWritten > 0 || counts.has("supporting")) && (
+          <Metric
+            label="Supporting documents"
+            value={result.summary.supportingWritten}
+            tone={counts.has("supporting") ? "warning" : "success"}
+            note={
+              counts.has("supporting")
+                ? `${counts.get("supporting")} to review in the flags below`
+                : "Linked to their parents"
+            }
+          />
+        )}
         <Metric
           label="File paths built"
           value={result.summary.filePathsWritten}
@@ -130,7 +143,12 @@ export function ResultsPanel({ result }: { result: RunResult }) {
                 <td className="transform-sample">
                   {t.appTypes.length ? t.appTypes.join(", ") : "—"}
                 </td>
-                <td>{t.status === "filled" ? t.rowsWritten : "—"}</td>
+                <td>
+                  {t.status === "filled" ? t.rowsWritten : "—"}
+                  {t.supportingWritten > 0 && (
+                    <span className="transform-note">+ {t.supportingWritten} supporting</span>
+                  )}
+                </td>
                 <td>
                   {t.status === "filled" ? (
                     <span className="badge tone-success">

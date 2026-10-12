@@ -270,3 +270,11 @@ input[type=checkbox] { accent-color: var(--primary); width: 12px; height: 12px; 
 .name-check-columns legend { font-size: 13px; color: var(--muted-foreground); margin-bottom: 8px; }
 .name-check-choice { display: flex; align-items: center; gap: 6px; }
 .name-check-choice select { min-width: 200px; max-width: 280px; border: 1px solid var(--border); border-radius: 5px; padding: 5px 8px; background: var(--background); color: var(--foreground); font-size: 13px; }
+/* Transformation: file path sheet picker (sheet, file name, folder path) */
+.transform-paths-picker { grid-template-columns: repeat(3, minmax(0, 1fr)); max-width: 980px; margin-top: 12px; }
+.transform-paths-picker > .transform-warning { grid-column: 1 / -1; margin: 0; }
+@media(max-width: 760px) { .transform-paths-picker { grid-template-columns: 1fr; } }
+/* Transformation: supporting document linkage */
+.transform-linkage { display: grid; gap: 6px; margin-top: 12px; max-width: 980px; }
+.transform-linkage .transform-paths-picker { margin-top: 4px; }
+.transform-linkage-types { grid-column: 1 / -1; margin-top: 0; }
