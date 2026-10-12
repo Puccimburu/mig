@@ -43,7 +43,7 @@ function pythonBackend(): Plugin {
     name: "python-backend",
     apply: "serve",
     async configureServer(server) {
-      if (process.env.SKIP_API === "1") return;
+      if (process.env["SKIP_API"] === "1") return;
       // After a config change Vite restarts; give the previous backend a moment to exit.
       for (let i = 0; i < 10 && (await portInUse(API_PORT)); i++)
         await new Promise((r) => setTimeout(r, 300));
@@ -52,7 +52,7 @@ function pythonBackend(): Plugin {
         return;
       }
       child = spawn(
-        process.env.PYTHON ?? "python",
+        process.env["PYTHON"] ?? "python",
         ["-m", "uvicorn", "app:app", "--port", String(API_PORT), "--reload"],
         { cwd: fileURLToPath(new URL("./backend", import.meta.url)), stdio: "inherit" },
       );

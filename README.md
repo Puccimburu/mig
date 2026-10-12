@@ -4,8 +4,9 @@ Document migration workspace: a React frontend (TanStack Start) with a Python ba
 
 | Page | Runs on |
 |---|---|
+| Sanity Checks (cleaning data) | Python backend: CLM users list (`backend/users_collector`) and user name check (`backend/name_check`) |
 | Transformation | TypeScript server functions (`src/server/transform`) |
-| Populate Request ID | Python backend (`backend/`), which drives Chrome to read the CLM Bulk Import Report |
+| Populate Request ID | Python backend (`backend/request_id`), which drives Chrome to read the CLM Bulk Import Report |
 
 ## Requirements
 
@@ -21,12 +22,13 @@ python -m pip install -r backend/requirements.txt
 
 ## Run
 
-Use two terminals:
-
 ```sh
-npm run dev       # web app
-npm run dev:api   # Python backend on port 8000; the web app proxies /api to it
+npm run dev
 ```
+
+This starts the web app and the Python backend (port 8000; the web app proxies `/api` to it). The backend's output appears in the same terminal, and stopping the dev server stops it too.
+
+To run the backend on its own instead (for example to restart it separately), start `npm run dev:api` first; `npm run dev` then uses that one. Set `SKIP_API=1` to start only the web app.
 
 If the backend isn't running, the Populate Request ID page says so and offers a "Check again" button.
 
@@ -36,6 +38,19 @@ If the backend isn't running, the Populate Request ID page says so and offers a 
 npm test          # frontend and transformation tests
 npm run test:api  # backend tests (no browser or CLM access needed)
 ```
+
+## Sanity Checks: user names
+
+Checks user-name columns (Business Owner, Assignee, ...) in client data against the users on the CLM.
+
+1. **CLM users list.** Collect it from the CLM (Vault → User Management → Users, 100 users per page) or upload a `users.xlsx` from an earlier collection. It is saved in `backend/data/` (git-ignored) and reused until replaced. A collection fails, instead of saving a partial list, when the users read don't add up to the total the CLM shows.
+2. **Client workbook.** Pick the sheet and the name columns. Likely name columns are pre-selected.
+3. **Check names.** Each name is matched against the list (Hound's matching: "Sen, Sudipta", department suffixes, middle names, initials):
+   - **Matched**: 85% or more, one active user.
+   - **Review**: 60–85%, or an inactive user, a name several users share, or a near-tie between two users.
+   - **Not Found**: below 60%, left blank.
+
+   Review suggestions can be accepted, swapped for another candidate, or cleared. The download writes the CLM user name and status next to each checked column. On Hound's template (one column, with "Correct User name" and "Validation Status" already on the sheet), it fills those columns instead. Rows that already have a correct name are never changed.
 
 ## Populate Request ID
 

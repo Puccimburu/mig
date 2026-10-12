@@ -43,3 +43,9 @@ backend/request_id/logs/
 backend/request_id/debug/
 backend/request_id/state.json
 backend/request_id/.env
+# Saved CLM users list (client data)
+backend/data/
+backend/users_collector/output/
+backend/users_collector/logs/
+backend/users_collector/debug/
+backend/users_collector/.env

@@ -1,7 +1,9 @@
-"""Job runner and API tests. A stand-in orchestrator replaces the CLM/browser run."""
+"""Job runner and API tests. Stand-in orchestrators replace the CLM/browser runs."""
 from __future__ import annotations
 
+import dataclasses
 import io
+import json
 import logging
 import shutil
 import sys
@@ -18,23 +20,27 @@ sys.path.insert(0, str(BACKEND))
 
 import app as app_module  # noqa: E402
 import jobs as jobs_module  # noqa: E402
-from jobs import JobBusy, JobError, JobManager  # noqa: E402
+from jobs import REQUEST_ID, USERS, JobBusy, JobError, JobManager  # noqa: E402
+from name_check import users_list  # noqa: E402
 
 PASSWORD = "s3cret-Pa55word!"
-SETTINGS = {
+SITE = {
     "url": "https://cloud9.example.com/tenant/help.aspx",
     "username": "someone@example.com",
     "password": PASSWORD,
+    "headless": True,
+}
+SETTINGS = {
+    **SITE,
     "uploaded_on": "2026-10-05 04:16 PM",
     "total_count": "2",
     "template": "MSA",
     "supporting_docs": False,
-    "headless": True,
 }
 
-# Stands in for orchestrator.py: reports what config it saw (minus the password),
-# logs the lines the job manager counts, and writes the outputs the real one writes.
-FAKE_ORCHESTRATOR = '''
+# Stands in for request_id/orchestrator.py: reports what config it saw (minus the
+# password), logs the lines the job manager counts, and writes the real outputs.
+FAKE_REQUEST_ORCHESTRATOR = '''
 import json, logging, os, shutil, time
 import config
 
@@ -65,20 +71,54 @@ def main():
     }
 ''' % PASSWORD
 
+# Stands in for users_collector/orchestrator.py.
+FAKE_USERS_ORCHESTRATOR = '''
+import logging, os
+import openpyxl
+import config
 
-@pytest.fixture
-def script_dir(tmp_path: Path) -> Path:
-    d = tmp_path / "request_id"
+logger = logging.getLogger("orchestrator")
+
+def main():
+    latest = os.path.join(config.OUTPUT_DIR, "latest")
+    os.makedirs(latest, exist_ok=True)
+    logger.info("3 users across 2 page(s) at 2/page")
+    logger.info("page 1/2: 2 user(s)  (total so far: 2)")
+    logger.info("page 2/2: 1 user(s)  (total so far: 3)")
+    wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Users"
+    ws.append(["Name", "User License", "Email", "Department", "Role", "Is Active?"])
+    ws.append(["Sudipta Sen", "Full", "s.sen@example.com", "Legal", "User", "Yes"])
+    ws.append(["Chandni Gurnani", "Full", "c.g@example.com", "PICG", "User", "Yes"])
+    ws.append(["Old Account", "Full", "old@example.com", "IT", "User", "No"])
+    wb.save(os.path.join(latest, "users.xlsx"))
+    return {"success": True, "users_collected": 3, "pages_processed": 2, "total_users": 3,
+            "duplicates_skipped": 0, "errors": [], "password_set": config.SITE_PASSWORD == "%s"}
+''' % PASSWORD
+
+
+def _kind(tmp_path: Path, kind, folder: str, orchestrator: str):
+    shutil.copy(BACKEND / "job_runtime.py", tmp_path / "job_runtime.py")
+    d = tmp_path / folder
     d.mkdir()
     for name in ("job.py", "config.py"):
-        shutil.copy(BACKEND / "request_id" / name, d / name)
-    (d / "orchestrator.py").write_text(FAKE_ORCHESTRATOR, encoding="utf-8")
-    return d
+        shutil.copy(BACKEND / folder / name, d / name)
+    (d / "orchestrator.py").write_text(orchestrator, encoding="utf-8")
+    return dataclasses.replace(kind, script_dir=d)
+
+
+@pytest.fixture
+def request_kind(tmp_path: Path):
+    return _kind(tmp_path, REQUEST_ID, "request_id", FAKE_REQUEST_ORCHESTRATOR)
+
+
+@pytest.fixture
+def users_kind(tmp_path: Path):
+    return _kind(tmp_path, USERS, "users_collector", FAKE_USERS_ORCHESTRATOR)
 
 
 @pytest.fixture(autouse=True)
-def remove_job_folders(monkeypatch):
-    """Delete every run folder the test creates (they live in the system temp dir)."""
+def isolate(monkeypatch, tmp_path: Path):
+    """Delete every run folder a test creates, and keep the saved users list in tmp."""
     created: list[Path] = []
     real_mkdtemp = tempfile.mkdtemp
 
@@ -88,6 +128,10 @@ def remove_job_folders(monkeypatch):
         return path
 
     monkeypatch.setattr(jobs_module.tempfile, "mkdtemp", tracking_mkdtemp)
+    data = tmp_path / "data"
+    monkeypatch.setattr(users_list, "DATA_DIR", data)
+    monkeypatch.setattr(users_list, "FILE", data / "users.xlsx")
+    monkeypatch.setattr(users_list, "META", data / "meta.json")
     yield
     for path in created:
         shutil.rmtree(path, ignore_errors=True)
@@ -112,9 +156,9 @@ def wait(job, timeout: float = 60):
     return job
 
 
-def test_runs_with_ui_settings_and_returns_outputs(script_dir: Path):
-    manager = JobManager(script_dir=script_dir)
-    job = wait(manager.start("MSA_2302.xlsx", workbook_bytes(), dict(SETTINGS)))
+def test_runs_with_ui_settings_and_returns_outputs(request_kind):
+    manager = JobManager()
+    job = wait(manager.start(request_kind, dict(SETTINGS), ("MSA_2302.xlsx", workbook_bytes())))
 
     assert job.status == "done", job.result
     assert job.result["seen"] == {
@@ -134,6 +178,7 @@ def test_runs_with_ui_settings_and_returns_outputs(script_dir: Path):
     view = job.view()
     assert view["hasWorkbook"] and view["hasReport"]
     assert view["result"]["fully_completed"] is False
+    assert "seen" not in view["result"]
 
     # The password reaches the run, but never its logs, the job view or any file on disk.
     assert PASSWORD not in str(job.logs)
@@ -144,32 +189,37 @@ def test_runs_with_ui_settings_and_returns_outputs(script_dir: Path):
             assert PASSWORD.encode() not in f.read_bytes(), f
 
 
-def test_only_one_run_at_a_time_and_cancel(script_dir: Path):
-    manager = JobManager(script_dir=script_dir)
-    first = manager.start("a.xlsx", workbook_bytes(), {**SETTINGS, "uploaded_on": "slow"})
+def test_only_one_clm_run_at_a_time_and_cancel(request_kind, users_kind):
+    manager = JobManager()
+    first = manager.start(request_kind, {**SETTINGS, "uploaded_on": "slow"}, ("a.xlsx", workbook_bytes()))
     with pytest.raises(JobBusy):
-        manager.start("b.xlsx", workbook_bytes(), dict(SETTINGS))
-    manager.cancel(first.id)
+        manager.start(request_kind, dict(SETTINGS), ("b.xlsx", workbook_bytes()))
+    with pytest.raises(JobBusy, match="Populate Request ID"):
+        manager.start(users_kind, dict(SITE))
+    manager.cancel(first)
     assert wait(first, 20).status == "cancelled"
-    second = wait(manager.start("b.xlsx", workbook_bytes(), dict(SETTINGS)))
+    second = wait(manager.start(request_kind, dict(SETTINGS), ("b.xlsx", workbook_bytes())))
     assert second.status == "done"
 
 
-def test_rejects_unusable_input_before_starting(script_dir: Path):
-    manager = JobManager(script_dir=script_dir)
+def test_rejects_unusable_input_before_starting(request_kind):
+    manager = JobManager()
     with pytest.raises(JobError, match="Contract Request"):
-        manager.start("x.xlsx", workbook_bytes(sheet="Sheet1"), dict(SETTINGS))
+        manager.start(request_kind, dict(SETTINGS), ("x.xlsx", workbook_bytes(sheet="Sheet1")))
     with pytest.raises(JobError, match="Record Reference Id"):
-        manager.start("x.xlsx", workbook_bytes(header="Ref"), dict(SETTINGS))
+        manager.start(request_kind, dict(SETTINGS), ("x.xlsx", workbook_bytes(header="Ref")))
     with pytest.raises(JobError, match="password"):
-        manager.start("x.xlsx", workbook_bytes(), {**SETTINGS, "password": ""})
+        manager.start(request_kind, {**SETTINGS, "password": ""}, ("x.xlsx", workbook_bytes()))
     with pytest.raises(JobError, match="xlsx"):
-        manager.start("x.csv", b"a,b", dict(SETTINGS))
+        manager.start(request_kind, dict(SETTINGS), ("x.csv", b"a,b"))
+    with pytest.raises(JobError, match="Upload"):
+        manager.start(request_kind, dict(SETTINGS))
     assert manager.jobs == {}
 
 
-def test_api_round_trip(script_dir: Path, monkeypatch):
-    monkeypatch.setattr(app_module, "jobs", JobManager(script_dir=script_dir))
+def test_api_round_trip(request_kind, monkeypatch):
+    monkeypatch.setattr(app_module.jobs, "jobs", {})
+    monkeypatch.setattr(app_module, "REQUEST_ID", request_kind)
     client = TestClient(app_module.app)
     assert client.get("/api/health").json() == {"ok": True}
 
@@ -179,8 +229,6 @@ def test_api_round_trip(script_dir: Path, monkeypatch):
         data={"options": "{}"},
     )
     assert bad.status_code == 400 and "Missing" in bad.json()["detail"]
-
-    import json
 
     started = client.post(
         "/api/request-id/jobs",
@@ -197,6 +245,41 @@ def test_api_round_trip(script_dir: Path, monkeypatch):
         {"record_reference_id": "1", "request_id": "100"}
     ]
     assert client.get("/api/request-id/jobs/nope").status_code == 404
+    # A request-id run is not reachable through the users-list routes.
+    assert client.get(f"/api/users-list/jobs/{started['id']}").status_code == 404
+
+
+def test_collecting_users_saves_the_list(users_kind, monkeypatch):
+    monkeypatch.setattr(app_module.jobs, "jobs", {})
+    monkeypatch.setattr(app_module, "USERS", users_kind)
+    client = TestClient(app_module.app)
+    assert client.get("/api/users-list").json() is None
+
+    started = client.post("/api/users-list/jobs", data={"options": json.dumps(SITE)}).json()
+    job = wait(app_module.jobs.get(started["id"]))
+    assert job.status == "done", job.result
+    assert job.counters == {"total": 3, "collected": 3, "pages": 2, "pagesDone": 2, "errors": 0}
+    assert job.result["password_set"] is True
+    assert PASSWORD not in str(job.logs) and PASSWORD not in json.dumps(job.view())
+
+    meta = client.get("/api/users-list").json()
+    assert meta["source"] == "collected" and meta["site"] == SITE["url"]
+    assert (meta["count"], meta["active"]) == (3, 2)
+    assert client.get("/api/users-list/file").status_code == 200
+
+
+def test_uploading_a_users_list(monkeypatch):
+    client = TestClient(app_module.app)
+    bad = client.post("/api/users-list", files={"file": ("u.xlsx", workbook_bytes(), "application/octet-stream")})
+    assert bad.status_code == 400 and "Name" in bad.json()["detail"]
+
+    wb = openpyxl.Workbook()
+    wb.active.append(["Name", "Email", "Is Active?"])
+    wb.active.append(["Sudipta Sen", "s@example.com", "Yes"])
+    buf = io.BytesIO()
+    wb.save(buf)
+    ok = client.post("/api/users-list", files={"file": ("u.xlsx", buf.getvalue(), "application/octet-stream")})
+    assert ok.status_code == 200 and ok.json()["count"] == 1 and ok.json()["source"] == "uploaded"
 
 
 def test_scraper_never_logs_the_password(caplog, monkeypatch):

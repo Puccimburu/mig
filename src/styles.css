@@ -263,3 +263,10 @@ input[type=checkbox] { accent-color: var(--primary); width: 12px; height: 12px; 
 .request-id-log span { color: var(--muted-foreground); }
 .request-id-log .level-warning { color: var(--warning); }
 .request-id-log .level-error, .request-id-log .level-critical { color: var(--danger); }
+/* Sanity Checks: user name check */
+.transform-note-inline { font-size: 12px; color: var(--muted-foreground); }
+.name-check-list { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; border: 1px solid var(--border); border-radius: 6px; padding: 10px 14px; max-width: 760px; font-size: 14px; }
+.name-check-columns { border: 0; padding: 0; margin: 16px 0 0; display: grid; gap: 8px; }
+.name-check-columns legend { font-size: 13px; color: var(--muted-foreground); margin-bottom: 8px; }
+.name-check-choice { display: flex; align-items: center; gap: 6px; }
+.name-check-choice select { min-width: 200px; max-width: 280px; border: 1px solid var(--border); border-radius: 5px; padding: 5px 8px; background: var(--background); color: var(--foreground); font-size: 13px; }

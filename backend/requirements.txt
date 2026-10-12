@@ -1,7 +1,9 @@
-fastapi
+﻿fastapi
 uvicorn[standard]
 python-multipart
 openpyxl
+rapidfuzz
+numpy
 selenium
 selenium-stealth
 undetected-chromedriver
