@@ -824,9 +824,11 @@ export function TransformationWizard() {
                 </Button>
                 <Button disabled={busy !== null || readyCount === 0} onClick={run}>
                   {busy === "run" ? <LoaderCircle className="animate-spin" /> : <Play />}
-                  {readyCount === templateColumns.length
-                    ? `Run all ${readyCount} templates`
-                    : `Run ${readyCount} of ${templateColumns.length} templates`}
+                  {templateColumns.length === 1
+                    ? "Run template"
+                    : readyCount === templateColumns.length
+                      ? `Run all ${readyCount} templates`
+                      : `Run ${readyCount} of ${templateColumns.length} templates`}
                 </Button>
               </div>
               {readyCount < templateColumns.length && (
